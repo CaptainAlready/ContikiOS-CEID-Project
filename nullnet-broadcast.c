@@ -1,42 +1,9 @@
-/*
- * Copyright (c) 2017, RISE SICS.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the Institute nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE INSTITUTE AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE INSTITUTE OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- * This file is part of the Contiki operating system.
- *
- */
+/* Broadcast a message between two motes through an exchange of Aknowledgment messages. 
+To broadcast a message press the mote button.
+Interrupts happen when a mote broadcasts a message without receiving an AK for the previous message.
 
-/**
- * \file
- *         NullNet broadcast example
- * \author
-*         Simon Duquennoy <simon.duquennoy@ri.se>
- *
- */
+Compile Using SKY mote. */
+
 
 #include "contiki.h"
 #include "net/netstack.h"
@@ -44,14 +11,17 @@
 #include <string.h>
 #include <stdio.h> /* For printf() */
 #include "dev/button-sensor.h"
+#include "leds.h"
 
 /* Log configuration */
 #include "sys/log.h"
-#define LOG_MODULE "App"
+#define LOG_MODULE "Test"
 #define LOG_LEVEL LOG_LEVEL_INFO
 
-  int sent,received = 0;
-  
+int sent,received = 0;      //message exchange flags
+unsigned int time_sent = 0; //to measure time through RTIMER
+int timeout = 0;            //interrupt flag
+ 
 /* Configuration */
 #define SEND_INTERVAL (8 * CLOCK_SECOND)
 
@@ -72,15 +42,18 @@ void input_callback(const void *data, uint16_t len,
     unsigned count;
     received = 1;
     memcpy(&count, data, sizeof(count));
-    
-  
+
+    //insert delays for troubleshouting
+    clock_delay(60000);
+    clock_delay(60000);
+    clock_delay(60000);
+    clock_delay(60000);
+    clock_delay(60000);
+    clock_delay(60000);
  
-    //LOG_INFO("Received %u from ", count);
-   /// LOG_INFO_LLADDR(src);
-    //LOG_INFO_("\n");
-    
-    
-    if(received == 1 && sent == 0){
+ 
+    //receiver sends AK
+    if(received == 1 && sent == 0 && timeout == 0){
     LOG_INFO("Sending AK %u to ", count);
     LOG_INFO_LLADDR(NULL);
     LOG_INFO_("\n");
@@ -90,23 +63,49 @@ void input_callback(const void *data, uint16_t len,
 
     NETSTACK_NETWORK.output(NULL);
     received = 0;
-    }
-   else if(sent == 1){
+    clock_delay(60000);
+    clock_delay(60000);
+    clock_delay(60000);
+    } //sender receives AK
+   else if(sent == 1 && timeout == 0){
+
+    //turn leds off in case of succesful message exchange
+    leds_off(LEDS_GREEN);
+    leds_off(LEDS_YELLOW);
     sent = 0;
     received = 0;
     LOG_INFO("AK received from ");
     LOG_INFO_LLADDR(src);
+    LOG_INFO("\n in %u clock Ticks ",(RTIMER_NOW() - time_sent));
     LOG_INFO_("\n");
-}
+    time_sent = 0;
+    clock_delay(60000);
+    clock_delay(60000);
+    clock_delay(60000);
+    } //Button has ben pressed more than one time...interrupt
+    else if(sent > 1 ){
+
+    //turn leds off 
+    leds_off(LEDS_GREEN);
+    leds_off(LEDS_YELLOW);
+    sent = 0;
+    received = 0;
+    LOG_INFO("timeout");
+    LOG_INFO_("\n");
+    timeout = 1;
+    clock_delay(60000);
+    clock_delay(60000);
+    clock_delay(60000);
+    }
   }
 }
+  
+
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(nullnet_example_process, ev, data)
 {
 
   static unsigned count = 0;
-
-  
   
   PROCESS_BEGIN();
   SENSORS_ACTIVATE(button_sensor);
@@ -126,18 +125,29 @@ PROCESS_THREAD(nullnet_example_process, ev, data)
 
   while(1) {
     PROCESS_WAIT_EVENT_UNTIL((ev == sensors_event && data == &button_sensor));
+    //set the flags
+    sent ++;
+    timeout = 0;
+    received = 0;
+
+    //using leds for troubleshooting 
+    leds_on(LEDS_GREEN);
     LOG_INFO("Sending %u to ", count);
-    sent = 1;
+    time_sent = RTIMER_NOW();
+    
+    
     LOG_INFO_LLADDR(NULL);
     LOG_INFO_("\n");
     
+
+    leds_on(LEDS_YELLOW);
     memcpy(nullnet_buf, &count, sizeof(count));
     nullnet_len = sizeof(count);
-
+    
     NETSTACK_NETWORK.output(NULL);
     count++;
   }
 
   PROCESS_END();
 }
-/*---------------------------------------------------------------------------*/
+
