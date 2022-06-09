@@ -43,7 +43,7 @@ void input_callback(const void *data, uint16_t len,
     received = 1;
     memcpy(&count, data, sizeof(count));
 
-    //insert delays for troubleshouting
+    //insert delays for troubleshooting
     clock_delay(60000);
     clock_delay(60000);
     clock_delay(60000);
